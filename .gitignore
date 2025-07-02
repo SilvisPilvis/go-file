@@ -28,7 +28,9 @@ go.work.sum
 .env
 
 # uploads
-uploads/thumbnails/*
+/uploads/*
+/uploads/thumbnails/*
+!/uploads/thumbnails/
 
 # Editor/IDE
 # .idea/
