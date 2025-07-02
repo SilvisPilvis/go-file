@@ -27,6 +27,12 @@ go.work.sum
 # env file
 .env
 
+# uploads
+uploads/
+uploads/*
+uploads/thumbnails/
+uploads/thumbnails/*
+
 # Editor/IDE
 # .idea/
 # .vscode/
