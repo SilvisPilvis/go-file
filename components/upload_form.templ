@@ -1,0 +1,129 @@
+package components
+
+import (
+    "strconv"
+)
+
+templ SendData(store_id int32) {
+    @templ.JSFuncCall("createAndUploadZip", store_id)
+}
+
+// Define a separate templ component for the JavaScript function call
+templ FileUploadPage(store_id int32) {
+    <!DOCTYPE html>
+    <html lang="en">
+    @Head("Upload Files")
+    <body class="bg-gray-100">
+
+        <!-- Include JSZip library -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+        <div class="container mx-auto p-4">
+            <h1 class="text-3xl font-bold mb-6">Upload Files</h1>
+
+            <!-- Form for file upload -->
+            <form 
+                id="uploadForm"
+                hx-post={"/auth/stores/" + strconv.Itoa(int(store_id)) + "/upload"}
+                hx-target="#status" 
+                hx-swap="innerHTML"
+                class="bg-white p-6 rounded-lg shadow-md"
+                enctype="multipart/form-data"
+            >
+                <div class="mb-4">
+                    <label for="fileInput" class="block text-sm font-medium text-gray-700">Choose files</label>
+                    <input 
+                        type="file" 
+                        id="fileInput" 
+                        name="files" 
+                        multiple 
+                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                </div>
+                <button 
+                    type="submit" 
+                    class="m-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                >
+                    Upload
+                </button>
+                @RedirectButton("Back to Store", "/auth/stores/" + strconv.Itoa(int(store_id)))
+                @RedirectButton("All Stores", "/auth/stores/")
+            </form>
+
+            <!-- Status message container -->
+            <div id="status" class="mt-4 text-sm text-gray-600">
+                <!-- Status updates will be displayed here -->
+            </div>
+        </div>
+
+        <!-- Separate JavaScript function -->
+        <script>
+            // Attach the event listener to the form's submit event
+            document.addEventListener('DOMContentLoaded', () => {
+                const form = document.getElementById('uploadForm');
+                if (form) {
+                    form.addEventListener('submit', (event) => {
+                        event.preventDefault(); // Prevent the default form submission
+
+                        const storeId = form.getAttribute('hx-post').split('/')[3]; // Extract store_id from hx-post
+                        createAndUploadZip(event, storeId);
+                    });
+                }
+            });
+
+            createAndUploadZip = function(event, storeId) {
+                const fileInput = document.getElementById('fileInput');
+                const files = fileInput.files;
+
+                if (files.length === 0) {
+                    alert('Please select at least one file.');
+                    return;
+                }
+
+                const status = document.getElementById('status');
+                status.textContent = 'Creating archive...';
+
+                const zip = new JSZip();
+
+                // Add files to the ZIP archive
+                for (const file of files) {
+                    zip.file(file.name, file);
+                }
+
+                // Generate the ZIP file
+                zip.generateAsync({ type: 'blob' }).then((zipData) => {
+                    const formData = new FormData();
+                    formData.append('archive', zipData, 'archive.zip'); // Append the ZIP file with a name
+
+                    // Perform the htmx POST request manually
+                    fetch(`/auth/stores/${storeId}/upload`, {
+                        method: 'POST',
+                        body: formData,
+                    })
+                    .then(response => response.json()) // Parse the JSON response
+                    .then(data => {
+                        if (data.error) {
+                            // If there is an error, display the error message
+                            status.textContent = `Error: ${data.error}`;
+                            status.className = 'mt-4 text-sm text-red-600'; // Update style for error
+                        } else if (data.message) {
+                            // If successful, display the success message
+                            status.textContent = data.message;
+                            status.className = 'mt-4 text-sm text-green-600'; // Update style for success
+                        } else {
+                            // Handle unexpected response format
+                            status.textContent = 'Unexpected response from server.';
+                            status.className = 'mt-4 text-sm text-red-600';
+                        }
+                    })
+                    .catch(error => {
+                        status.textContent = 'An error occurred while uploading files.';
+                        status.className = 'mt-4 text-sm text-red-600'; // Update style for error
+                        console.error(error);
+                    });
+                });
+            };
+        </script>
+    </body>
+    </html>
+}

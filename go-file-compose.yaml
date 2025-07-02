@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+    go-file:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      container_name: go-file
+      restart: always
+      ports:
+        - "6500:6500"  # Optional, only if you want to access it directly
+      networks:
+        - internal_network
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=internal_network
+        - traefik.http.routers.go-file-http.entrypoints=web
+        - traefik.http.routers.go-file-http.rule=Host(`files.vinetaerentraute.id.lv`)
+        - traefik.http.routers.go-file-https.entrypoints=websecure
+        - traefik.http.routers.go-file-https.rule=Host(`files.vinetaerentraute.id.lv`)
+        - traefik.http.routers.go-file-https.tls=true
+        - traefik.http.routers.go-file-https.tls.certresolver=letsencrypt
+        - traefik.http.services.go-file.loadbalancer.server.port=8080

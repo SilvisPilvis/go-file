@@ -1,0 +1,84 @@
+package components
+
+templ NewStorePage() {
+<html>
+    @Head("New Store")
+    <body class="bg-gray-100 flex items-center justify-center h-screen">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h1 class="text-2xl font-bold mb-6 text-center">Create Store</h1>
+            <form 
+                hx-post="/auth/stores/create" 
+                hx-trigger="submit" 
+                hx-ext="json-enc"
+                hx-on:after-request="handleResponse(event)"
+            >
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">
+                        Store Name
+                        <input
+                            type="text"
+                            id="store_name"
+                            name="store_name"
+                            required
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                    </label>
+                    <label class="block text-sm font-medium text-gray-700">
+                        Store Cover
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value="1"
+                            id="store_cover"
+                            name="store_cover"
+                            disabled
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                    </label>
+                </div>
+                <button
+                    type="submit"
+                    class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                >
+                    Create Store
+                </button>
+            </form>
+
+            <!-- Response Message Container -->
+            <div id="response-message" class="mt-4 text-center text-sm"></div>
+
+            <!-- JavaScript to Handle Response -->
+            <script>
+                function handleResponse(event) {
+                    const responseDiv = document.getElementById('response-message');
+                    const response = event.detail.xhr.response;
+
+                    // Clear previous messages
+                    responseDiv.textContent = '';
+                    responseDiv.className = 'mt-4 text-center text-sm';
+
+                    try {
+                        const data = JSON.parse(response);
+
+                        if (data.error) {
+                            // Display error message
+                            responseDiv.textContent = data.error;
+                            responseDiv.classList.add('text-red-500');
+                        } else if (data.message) {
+                            // Display success message
+                            responseDiv.textContent = data.message;
+                            responseDiv.classList.add('text-green-500');
+                        }
+                    } catch (e) {
+                        // Handle invalid JSON response
+                        responseDiv.textContent = 'An unexpected error occurred.';
+                        responseDiv.classList.add('text-red-500');
+                    }
+                }
+            </script>
+        </div>
+    </body>
+</html>
+}

@@ -1,0 +1,39 @@
+package components
+
+import (
+    "main/internal/repository" // Replace with the actual path to your GetFilesPaginatedRow type
+    "strconv"
+)
+
+templ ImageMasonryGrid(files []repository.GetFilesPaginatedRow, store_id int32) {
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+        for _, file := range files {
+            <div class="break-inside-avoid relative">
+                <div class="relative">
+                    <img 
+                        src={ string(templ.URL("/auth/files/" + file.FileName)) } 
+                        alt={ file.FileOriginalName } 
+                        class="w-full h-auto rounded-lg shadow-md hover:shadow-lg transition-shadow"
+                    />
+                    <form 
+                        hx-delete={ "/auth/stores/" + strconv.Itoa(int(store_id)) + "/" + file.FileName } 
+                        hx-target="#image-masonry-grid"
+                        hx-swap="outerHTML"
+                        class="absolute top-2 right-2"
+                    >
+                        <button 
+                            type="submit" 
+                            class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-sm hover:bg-red-600 transition-colors"
+                        >
+                            X
+                        </button>
+                    </form>
+                </div>
+                <div class="mt-2 text-sm text-gray-600">
+                    <span>{ file.FileOriginalName }</span>
+                    <span class="block text-xs text-gray-400">{ file.FileCreatedAt.Format("2006-01-02 15:04:05") }</span>
+                </div>
+            </div>
+        }
+    </div>
+}

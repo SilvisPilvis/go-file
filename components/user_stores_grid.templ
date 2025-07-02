@@ -1,0 +1,31 @@
+package components
+
+import (
+    "strconv"
+    "main/internal/repository" // Replace with the actual path to your UserStore type
+)
+
+templ UserStoresGrid(stores []repository.UserStore) {
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+        for _, store := range stores {
+            <a href={ templ.URL("/auth/stores/" + strconv.Itoa(int(store.Storeid))) + "?page=0" } 
+               class="flex items-center justify-center p-6 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow w-full h-24 relative">
+                <div class="text-center">
+                    <div class="text-base font-semibold mb-1">Store</div>
+                    <div class="text-xl font-bold">{ strconv.Itoa(int(store.Storeid)) }</div>
+                </div>
+                <form 
+                    hx-delete={ "/auth/stores/" + strconv.Itoa(int(store.Storeid)) + "/delete" }
+                    class="absolute top-2 right-2"
+                >
+                    <button 
+                        type="submit" 
+                        class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-sm hover:bg-red-600 transition-colors"
+                    >
+                        X
+                    </button>
+                </form>
+            </a>
+        }
+    </div>
+}

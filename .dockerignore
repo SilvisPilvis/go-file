@@ -1,0 +1,14 @@
+# Ignore the vendor directory
+vendor/
+
+# Ignore the build artifacts
+main
+
+# Ignore the local Go module cache
+.go/
+
+# Ignore the local test cache
+*.test
+
+# Ignore any other files you don't want in the image
+*.log

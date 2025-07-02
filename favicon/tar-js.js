@@ -1,0 +1,8 @@
+/**
+ * Minified by jsDelivr using Terser v5.19.2.
+ * Original file: /npm/tar-js@0.3.0/lib/tar.js
+ *
+ * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
+ */
+!function(){"use strict";var t,e=require("./header"),i=require("./utils"),n=512;function o(e){this.written=0,t=(e||20)*n,this.out=i.clean(t)}o.prototype.append=function(o,r,s,u){var h,a,c,p,l,f,d;if("string"==typeof r)r=i.stringToUint8(r);else if(r.constructor!==Uint8Array.prototype.constructor)throw"Invalid input type. You gave me: "+r.constructor.toString().match(/function\s*([$A-Za-z_][0-9A-Za-z_]*)\s*\(/)[1];return"function"==typeof s&&(u=s,s={}),c=(s=s||{}).mode||4095&parseInt("777",8),p=s.mtime||Math.floor(+new Date/1e3),l=s.uid||0,f=s.gid||0,h={fileName:o,fileMode:i.pad(c,7),uid:i.pad(l,7),gid:i.pad(f,7),fileSize:i.pad(r.length,11),mtime:i.pad(p,11),checksum:"        ",type:"0",ustar:"ustar  ",owner:s.owner||"",group:s.group||""},a=0,Object.keys(h).forEach((function(t){var e,i,n=h[t];for(e=0,i=n.length;e<i;e+=1)a+=n.charCodeAt(e)})),h.checksum=i.pad(a,6)+"\0 ",d=e.format(h),this.out.set(d,this.written),this.written+=d.length,this.written+r.length>this.out.length&&(this.out=i.extend(this.out,this.written,r.length,t)),this.out.set(r,this.written),this.written+=r.length+(n-(r.length%n||n)),this.out.length-this.written<1024&&(this.out=i.extend(this.out,this.written,1024,t)),"function"==typeof u&&u(this.out),this.out},o.prototype.clear=function(){this.written=0,this.out=i.clean(t)},o.utils=i,o.stringToUint8=i.stringToUint8,o.uint8ToBase64=i.uint8ToBase64,o.base64ToUint8=i.base64ToUint8,module.exports=o}();
+//# sourceMappingURL=/sm/ce90988bffb67b5429b47c69e9bc26275992889076711bbd563a68e0165107f0.map
