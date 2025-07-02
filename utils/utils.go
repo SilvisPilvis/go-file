@@ -153,6 +153,19 @@ func InitUploadsDir() error {
 	if !uploads_dir_exixts {
 		os.Mkdir(consts.UPLOADS_DIR, 0755)
 	}
+
+	// Check if thumbnails dir exists
+	thumbnails_dir_exixts, err := FileExists(consts.THUMBNAILS_DIR)
+	// If error then return it
+	if err != nil {
+		return err
+	}
+
+	// If uploads dir doesn't exist then create it
+	if !thumbnails_dir_exixts {
+		os.Mkdir(consts.THUMBNAILS_DIR, 0755)
+	}
+
 	// Return no error
 	return nil
 }
