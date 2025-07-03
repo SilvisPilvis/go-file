@@ -17,7 +17,8 @@ func main() {
 	r.Use(gin.Recovery())
 
 	if consts.PORT == "" {
-		log.Fatal("PORT is not set in .env file")
+		// log.Fatal("PORT is not set in .env file")
+		consts.PORT = "6500"
 	}
 
 	var trusted_proxies []string = []string{"127.0.0.1", "::1"}

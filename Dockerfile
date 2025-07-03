@@ -1,6 +1,8 @@
 # Use the official Golang image as a build stage
-FROM arm64v8/golang:1.24 AS builder
-# FROM --platform=linux/arm64 golang:1.24 AS builder
+# Use --platform to allow buildx to select the correct base image for the target architecture
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+# Changed to golang:1.24-alpine as it's more common, or use 1.24 as you had.
+                                                           # $BUILDPLATFORM is a special buildx variable.
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -16,11 +18,15 @@ COPY . .
 RUN go mod download
 
 # Build the Go app
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o main .
+# GOOS and GOARCH are inferred by Docker Buildx based on the target platform.
+# We don't need to hardcode GOOS=linux GOARCH=arm64 anymore.
+RUN CGO_ENABLED=0 go build -o main .
 
 # Start a new stage from scratch
-FROM arm64v8/alpine:latest
-# FROM --platform=linux/arm64 alpine:latest
+# Use --platform to allow buildx to select the correct base image for the target architecture
+FROM --platform=$BUILDPLATFORM alpine:latest
+                                           # Changed to alpine:latest
+                                           # $BUILDPLATFORM is a special buildx variable.
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
