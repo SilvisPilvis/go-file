@@ -9,7 +9,7 @@ on:
       - main # Trigger on pull requests to the main branch
 
 env:
-  IMAGE_NAME: ghcr.io/silvispilvis/go-file:latest
+  IMAGE_NAME: ghcr.io/silvispilvis/go-file
   # IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
