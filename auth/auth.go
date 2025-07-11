@@ -1,3 +1,4 @@
+// Package auth contains custom gin JWT functions and related functions and structs as well as a gin auth middleware
 package auth
 
 import (
@@ -27,7 +28,7 @@ type TokenHeader struct {
 }
 
 type TokenPayload struct {
-	Id       int32
+	ID       int64
 	Username string
 	Exp      time.Time
 	Role     Role
@@ -47,7 +48,14 @@ type Token struct {
 
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, err := c.Cookie("token")
+		// Get the cookie from the request
+		cookie, err := c.Cookie("token")
+		// If cookie is empty or not hound/present, redirect to login page
+		if cookie == "" {
+			c.Redirect(http.StatusFound, "/login")
+		}
+
+		// If we get an error when getting cookie
 		if err != nil {
 			// Check if the error message indicates token expiration
 			if strings.Contains(err.Error(), "token has expired") {
@@ -122,32 +130,31 @@ func EncodeStaticToken(header TokenHeader, payload TokenPayload) *string {
 	tokenHeader := header
 	tokenPayload := payload
 
-	header_bytes, err := json.Marshal(tokenHeader)
+	headerBytes, err := json.Marshal(tokenHeader)
 	if err != nil {
 		return nil
 	}
 
-	payload_bytes, err := json.Marshal(tokenPayload)
+	payloadBytes, err := json.Marshal(tokenPayload)
 	if err != nil {
 		return nil
 	}
 
-	base64_header := base64.URLEncoding.EncodeToString(header_bytes)
-	base64_payload := base64.URLEncoding.EncodeToString(payload_bytes)
+	base64Header := base64.URLEncoding.EncodeToString(headerBytes)
+	base64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
 
-	signature := fmt.Sprintf("%s.%s", base64_header, base64_payload)
+	signature := fmt.Sprintf("%s.%s", base64Header, base64Payload)
 
-	token_signature := hmac.New(sha256.New, []byte(consts.SECRET))
-	token_signature.Write([]byte(signature))
+	tokenSignature := hmac.New(sha256.New, []byte(consts.SECRET))
+	tokenSignature.Write([]byte(signature))
 
-	base64_signature := base64.URLEncoding.EncodeToString(token_signature.Sum(nil))
+	base64Signature := base64.URLEncoding.EncodeToString(tokenSignature.Sum(nil))
 
-	res := fmt.Sprintf("%s.%s.%s", base64_header, base64_payload, base64_signature)
+	res := fmt.Sprintf("%s.%s.%s", base64Header, base64Payload, base64Signature)
 
 	return &res
 }
 
-// func DecodeToken(token string) (map[string]interface{}, error) {
 func DecodeToken(token string) (*Token, error) {
 	if len(token) == 0 {
 		return nil, fmt.Errorf("token is empty when decoding")
@@ -155,7 +162,6 @@ func DecodeToken(token string) (*Token, error) {
 
 	// Strip the "Bearer " prefix from the token if it exists
 	token = strings.TrimPrefix(token, "Bearer  ")
-
 	token = strings.TrimPrefix(token, "Bearer ")
 
 	// return nil, fmt.Errorf("Token %v", token)

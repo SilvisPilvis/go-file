@@ -17,7 +17,7 @@ const (
 
 var (
 	// DB_URL string = "postgres://postgres:postgres@localhost:5432/postgres"
-	DB_URL          string
+	DB_URL          string = "sqlite.db"
 	SECRET          string
 	PORT            string = "6500"
 	UPLOADS_DIR            = "./uploads/"
