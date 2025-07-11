@@ -2,7 +2,9 @@ package utils
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/md5"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -79,20 +81,45 @@ func RandomString(n int) string {
 	return sb.String()
 }
 
-func NewNanoId(length int) string {
+func NewNanoID(length int) string {
 	return RandomString(length)
 }
 
-// func HashPassword(password string) (string, error) {
-// 	key := argon2.IDKey([]byte(password), []byte(consts.SECRET), 1, 64*1024, 4, 32)
-// 	if key == nil {
-// 		return "", fmt.Errorf("Failed to hash password")
-// 	}
-// 	return string(key), nil
-// }
+func InitDBSchema(conn *sql.Conn, schemaPath string) error {
+	schema, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return err
+	}
+
+	queries := strings.Split(string(schema), ";")
+
+	for i, query := range queries {
+		query = strings.TrimSpace(query) + ";"
+
+		// log.Println("Executing migration [", i+1, "/", len(queries), "]: ", query)
+		log.Println("Executing migration [", i+1, "/", len(queries), "]")
+
+		_, err = conn.ExecContext(context.Background(), string(query))
+		if err != nil && !strings.Contains(err.Error(), "not an error") {
+			// log.Println("Failed to execute migration [", i+1, "/", len(queries), "]: ", query)
+			log.Println("Failed to execute migration [", i+1, "/", len(queries), "]")
+			return err
+		} else {
+			log.Println("Migration [", i+1, "/", len(queries), "] executed successfully")
+		}
+	}
+
+	return nil
+}
 
 func HashPassword(password string) (string, error) {
-	key := argon2.IDKey([]byte(password), []byte(consts.SECRET), 1, 64*1024, 4, 32)
+	decodedSecret, err := hex.DecodeString(consts.SECRET)
+	if err != nil {
+		return "", fmt.Errorf("Failed to hex decode secret: %w", err)
+	}
+
+	// key := argon2.IDKey([]byte(password), []byte(consts.SECRET), 1, 64*1024, 4, 32)
+	key := argon2.IDKey([]byte(password), []byte(decodedSecret), 1, 64*1024, 4, 32)
 	if key == nil {
 		return "", fmt.Errorf("Failed to hash password")
 	}
@@ -101,6 +128,11 @@ func HashPassword(password string) (string, error) {
 
 // CheckPassword verifies if the provided password matches the stored hashed password.
 func CheckPassword(providedPassword string, storedHash string) (bool, error) {
+	decodedSecret, err := hex.DecodeString(consts.SECRET)
+	if err != nil {
+		return false, fmt.Errorf("Failed to hex decode secret: %w", err)
+	}
+
 	// Decode the stored hash from hexadecimal back to binary
 	storedKey, err := hex.DecodeString(storedHash)
 	if err != nil {
@@ -108,7 +140,7 @@ func CheckPassword(providedPassword string, storedHash string) (bool, error) {
 	}
 
 	// Generate a new hash for the provided password using the same parameters
-	newKey := argon2.IDKey([]byte(providedPassword), []byte(consts.SECRET), 1, 64*1024, 4, 32)
+	newKey := argon2.IDKey([]byte(providedPassword), []byte(decodedSecret), 1, 64*1024, 4, 32)
 
 	// Compare the two hashes securely
 	return constantTimeCompare(newKey, storedKey), nil
@@ -132,8 +164,8 @@ func constantTimeCompare(hash1, hash2 []byte) bool {
 	return result == 0
 }
 
-func GetFileHash(file_path string) string {
-	data, err := os.ReadFile(file_path)
+func GetFileHash(filePath string) string {
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Fatalf("Failed to get file hash: %v", err)
 	}
@@ -143,26 +175,26 @@ func GetFileHash(file_path string) string {
 
 func InitUploadsDir() error {
 	// Check if uploads dir exists
-	uploads_dir_exixts, err := FileExists(consts.UPLOADS_DIR)
+	uploadsDirExixts, err := FileExists(consts.UPLOADS_DIR)
 	// If error then return it
 	if err != nil {
 		return err
 	}
 
 	// If uploads dir doesn't exist then create it
-	if !uploads_dir_exixts {
+	if !uploadsDirExixts {
 		os.Mkdir(consts.UPLOADS_DIR, 0755)
 	}
 
 	// Check if thumbnails dir exists
-	thumbnails_dir_exixts, err := FileExists(consts.THUMBNAILS_DIR)
+	thumbnailsDirExixts, err := FileExists(consts.THUMBNAILS_DIR)
 	// If error then return it
 	if err != nil {
 		return err
 	}
 
 	// If uploads dir doesn't exist then create it
-	if !thumbnails_dir_exixts {
+	if !thumbnailsDirExixts {
 		os.Mkdir(consts.THUMBNAILS_DIR, 0755)
 	}
 
@@ -171,18 +203,18 @@ func InitUploadsDir() error {
 }
 
 func GetTokenFromCookie(c *gin.Context) (*auth.Token, error) {
-	cookie_token, err := c.Cookie("token")
+	cookieToken, err := c.Cookie("token")
 	if err != nil {
 		msg := errors.New("Failed to get token from middleware")
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": msg.Error()})
 	}
 
-	token, err := auth.DecodeToken(cookie_token)
+	token, err := auth.DecodeToken(cookieToken)
 	if err != nil {
 
-		needs_redirect := auth.RedirectExpired(c)
-		if needs_redirect {
+		needsRedirect := auth.RedirectExpired(c)
+		if needsRedirect {
 			return nil, nil
 		}
 
@@ -298,7 +330,11 @@ func CreateThumbnail(srcImagePath, dstImagePath string, maxSize int) error {
 	}
 	defer input.Close()
 
-	var src image.Image
+	src, _, err := image.Decode(input)
+	if err != nil {
+		// failed to decode image
+		return err
+	}
 
 	originalWidth := src.Bounds().Max.X
 	originalHeight := src.Bounds().Max.Y
@@ -333,7 +369,7 @@ func CreateThumbnail(srcImagePath, dstImagePath string, maxSize int) error {
 
 type WriteToDiskResult struct {
 	Name   string
-	NanoId string
+	NanoID string
 	Ext    string
 }
 
@@ -357,11 +393,11 @@ func DecompressAndExtract(src, dst string) ([]WriteToDiskResult, error) {
 		// Create the target file path using only the base name of the file
 		ext := filepath.Ext(file.Name) // Get extension
 		// original_name := strings.TrimSuffix(file.Name, ext) // Get original file name without extension
-		original_name := file.Name // Get original file name
-		nano_id := NewNanoId(6)
-		new_file_name := nano_id + ext // Get randomized file name with extension
-		target := filepath.Join(dst, new_file_name)
-		thumb_name := filepath.Join(consts.THUMBNAILS_DIR, "thumb_"+nano_id+ext)
+		originalName := file.Name // Get original file name
+		nanoID := NewNanoID(6)
+		newFileName := nanoID + ext // Get randomized file name with extension
+		target := filepath.Join(dst, newFileName)
+		thumbName := filepath.Join(consts.THUMBNAILS_DIR, "thumb_"+nanoID+ext)
 
 		// Open the file inside the ZIP archive
 		zipFile, err := file.Open()
@@ -382,14 +418,14 @@ func DecompressAndExtract(src, dst string) ([]WriteToDiskResult, error) {
 			return nil, err
 		}
 
-		err = CreateThumbnail(target, thumb_name, consts.THUMBNAILS_SIZE)
+		err = CreateThumbnail(target, thumbName, consts.THUMBNAILS_SIZE)
 		if err != nil {
 			return nil, err
 		}
 
 		result = append(result, WriteToDiskResult{
-			Name:   original_name,
-			NanoId: nano_id,
+			Name:   originalName,
+			NanoID: nanoID,
 			Ext:    ext,
 		})
 	}

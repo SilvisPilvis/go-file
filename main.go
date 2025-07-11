@@ -21,9 +21,11 @@ func main() {
 		consts.PORT = "6500"
 	}
 
-	var trusted_proxies []string = []string{"127.0.0.1", "::1"}
+	var trustedProxies []string = []string{"127.0.0.1", "::1"}
 
-	r.SetTrustedProxies(trusted_proxies)
+	r.SetTrustedProxies(trustedProxies)
+
+	r.GET("/", routes.RedirectLoggedIn)
 
 	r.GET("/favicon", routes.ServeFavicon)
 

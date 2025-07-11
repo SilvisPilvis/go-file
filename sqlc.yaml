@@ -1,30 +1,72 @@
 version: "2"
 sql:
-  - engine: "postgresql"
+  - engine: "sqlite"
     schema: "migrations/"
     queries: "query/"
     gen:
       go:
         emit_json_tags: true
+        emit_pointers_for_null_types: true # Add this line
         package: "repository"
         out: "internal/repository"
-        sql_package: "pgx/v5"
+        sql_package: "database/sql"
         overrides:
-          - db_type: "pg_catalog.timestamp"
+          # Timestamps
+          - db_type: "datetime"
             go_type:
               import: "time"
               type: "Time"
-          - db_type: "timestamptz"
-            go_type:
-              import: "time"
-              type: "Time"
-          - db_type: "pg_catalog.varchar"
-            go_type:
-              type: "string"
-          - db_type: "pg_catalog.int4"
-            go_type:
-              type: "int32"
-          - db_type: "pg_catalog.text"
-            go_type:
-              type: "string"
+          # Integers
+          # - db_type: "integer" # For general INTEGER types in SQLite
+          #   go_type:
+          #     type: "int32"
+          # - db_type: "bigint" # If you happen to have BIGINT specifically
+          #   go_type:
+          #     type: "int32"
+          # - db_type: "int" # Another common integer alias
+          #   go_type:
+          #     type: "int32"
 
+          # Override sqlite primaty keys from int64 to int32
+          # - column: "id"
+          #   table: "users"
+          #   go_type:
+          #     type: "int32"
+          # - column: "id"
+          #   table: "stores"
+          #   go_type:
+          #     type: "int32"
+          # - column: "id"
+          #   table: "files"
+          #   go_type:
+          #     type: "int32"
+          # - column: "id"
+          #   table: "user_store"
+          #   go_type:
+          #     type: "int32"
+          # - column: "id"
+          #   table: "file_store"
+          #   go_type:
+          #     type: "int32"
+          # Override foreign keys userId and storeId to int32
+          # - column: "userId"
+          #   table: "user_store"
+          #   go_type:
+          #     type: "int32"
+          # - column: "storeId"
+          #   table: "user_store"
+          #   go_type:
+          #     type: "int32"
+          # - column: "fileId"
+          #   table: "file_store"
+          #   go_type:
+          #     type: "int32"
+          # - column: "storeId"
+          #   table: "file_store"
+          #   go_type:
+          #     type: "int32"
+          # Override 'cover' in 'stores' to int32
+          # - column: "cover"
+          #   table: "stores"
+          #   go_type:
+          #     type: "int32"

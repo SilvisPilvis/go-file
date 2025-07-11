@@ -1,17 +1,17 @@
 -- name: GetStoreByID :one
-select * from stores where id = $1;
+select * from stores where id = ?;
 
 -- name: GetStoreByName :one
-select * from stores where name = $1;
+select * from stores where name = ?;
 
 -- name: GetAllStores :many
 select * from stores;
 
 -- name: CreateStore :one
-insert into stores (id, name, cover) values ($1, $2, $3) returning *;
+insert into stores (id, name, cover) values (?, ?, ?) returning *;
 
 -- name: RenameStore :one
-update stores set name = $2 where id = $1 returning *;
+update stores set name = ? where id = ? returning *;
 
 -- name: DeleteStore :exec
-delete from stores where id = $1;
+delete from stores where id = ?;

@@ -1,7 +1,9 @@
+// Package routes contains all the route handlers for the API
 package routes
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -18,20 +20,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
-// func RegisterRoute() {
-//
-// }
-
 var (
-	ctx            = context.Background()
-	conn, conn_err = InitDBConnection(consts.DB_URL)
-	repo           = repository.New(conn)
+	ctx = context.Background()
+	// conn, connErr = InitPgDBConnection(consts.DB_URL)
+	conn, connErr = InitSqlite(consts.DB_URL)
+	repo          = repository.New(conn)
 )
 
 type User struct {
-	Id       int32  `json:"id"`
+	ID       int64  `json:"id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Role     string `json:"role"`
@@ -81,7 +81,7 @@ type CreateStore struct {
 // 	return utf8.ValidString(s)
 // }
 
-func InitDBConnection(dbURL string) (*pgxpool.Pool, error) {
+func InitPgDBConnection(dbURL string) (*pgxpool.Pool, error) {
 	ctx := context.Background()
 	// Create the connection pool
 	conn, err := pgxpool.New(context.Background(), dbURL)
@@ -99,9 +99,70 @@ func InitDBConnection(dbURL string) (*pgxpool.Pool, error) {
 	return conn, nil
 }
 
+func InitSqlite(dbPath string) (*sql.Conn, error) {
+	// Embeded Replica: read-only local replica of cloud db
+	// Local Only: local sqlite db
+
+	dbPath = "file:" + dbPath
+	log.Println("Opening sqlite db in: ", dbPath)
+
+	// --- Embedded Replica ---
+	// primaryURL := "file:" + dbPath + "?cache=shared&mode=memory&_fk=1"
+	// primaryURL := "libsql://" + dbPath + "?_fk=1&busy_timeout=30000"
+	// connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryURL)
+	// if err != nil {
+	// 	log.Fatal("Failed to make libSql sqlite connector")
+	// 	return nil, err
+	// }
+
+	// db := sql.OpenDB(connector)
+	// defer db.Close()
+
+	// --- Local Only ---
+	db, err := sql.Open("libsql", dbPath)
+	if err != nil {
+		log.Fatal("Failed to open sqlite db")
+		return nil, err
+	}
+	defer db.Close()
+
+	// Configure the database connection pool
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	pingErr := db.Ping()
+
+	if pingErr != nil {
+		log.Fatal("Failed to ping sqlite db")
+	}
+
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		log.Fatal("Failed to get connection from sqlite db")
+		return nil, err
+	}
+
+	err = utils.InitDBSchema(conn, "migrations/schema.sql")
+	if err != nil {
+		log.Fatal("Failed to init db schema: ", err)
+		return nil, err
+	} else {
+		log.Println("DB schema initialized successfully")
+	}
+
+	// return db, nil
+	return conn, nil
+}
+
+func RedirectLoggedIn(c *gin.Context) {
+	auth.AuthRequired()
+
+	c.Redirect(http.StatusFound, "/auth/stores")
+}
+
 func Login(c *gin.Context) {
-	if conn_err != nil {
-		msg := errors.New("Failed to connect to database: " + conn_err.Error())
+	if connErr != nil {
+		msg := errors.New("Failed to connect to database: " + connErr.Error())
 
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -120,7 +181,11 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	db_user, err := repo.LoginUser(context.Background(), user.Username)
+	dbUser, err := repo.LoginUser(context.Background(), user.Username)
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to login user"})
+	}
 
 	header := auth.TokenHeader{
 		Alg: "HS256",
@@ -136,7 +201,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	match, err := utils.CheckPassword(user.Password, db_user.Password)
+	match, err := utils.CheckPassword(user.Password, dbUser.Password)
 	if err != nil {
 		c.Error(errors.New("Invalid password"))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid username or password"})
@@ -152,14 +217,14 @@ func Login(c *gin.Context) {
 
 	if id == 1 {
 		payload = auth.TokenPayload{
-			Id:       id,
+			ID:       id,
 			Username: user.Username,
 			Exp:      time.Now().Add(consts.EXPIRY_TIME),
 			Role:     auth.ADMIN,
 		}
 	} else {
 		payload = auth.TokenPayload{
-			Id:       id,
+			ID:       id,
 			Username: user.Username,
 			Exp:      time.Now().Add(consts.EXPIRY_TIME),
 			Role:     auth.USER,
@@ -201,12 +266,6 @@ func Register(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-
-	// c.Error(errors.New(data.Username))
-	// c.AbortWithStatusJSON(int(http.StatusBadRequest), gin.H{
-	// 	"error": data.Username,
-	// })
-	// return
 
 	if data.Password != data.Repeat {
 		msg := errors.New("Passwords don't match")
@@ -264,9 +323,9 @@ func ShowLogin(c *gin.Context) {
 }
 
 func ServeUploadedFile(c *gin.Context) {
-	file_nanoid := c.Param("fileid")
+	fileNanoid := c.Param("fileid")
 
-	if _, err := strconv.Atoi(file_nanoid); err == nil {
+	if _, err := strconv.Atoi(fileNanoid); err == nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": errors.New("File Id is a number, must be a NanoId instead"),
 		})
@@ -281,9 +340,9 @@ func ServeUploadedFile(c *gin.Context) {
 		return
 	}
 
-	is_owner, err := repo.IsOwner(context.Background(), repository.IsOwnerParams{
+	isOwner, err := repo.IsOwner(context.Background(), repository.IsOwnerParams{
 		Username: token.Payload.Username,
-		Name:     file_nanoid,
+		Name:     fileNanoid,
 	})
 	if err != nil {
 		c.Error(errors.New("Failed to get file owner"))
@@ -293,7 +352,7 @@ func ServeUploadedFile(c *gin.Context) {
 		return
 	}
 
-	if !is_owner {
+	if !isOwner {
 		c.Error(errors.New("User doesn't own this file"))
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "User doesn't own this file",
@@ -301,7 +360,7 @@ func ServeUploadedFile(c *gin.Context) {
 		return
 	}
 
-	original_file_name, err := repo.GetFileOriginalNameByNanoId(context.Background(), file_nanoid)
+	originalFileName, err := repo.GetFileOriginalNameByNanoId(context.Background(), fileNanoid)
 	if err != nil {
 		c.Error(err)
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -309,9 +368,9 @@ func ServeUploadedFile(c *gin.Context) {
 		})
 		return
 	}
-	ext := filepath.Ext(original_file_name.OriginalName)
+	ext := filepath.Ext(originalFileName.OriginalName)
 
-	c.File(fmt.Sprintf("%s/%s%s", consts.UPLOADS_DIR, file_nanoid, ext))
+	c.File(fmt.Sprintf("%s/%s%s", consts.UPLOADS_DIR, fileNanoid, ext))
 }
 
 func ServeFavicon(c *gin.Context) {
@@ -345,7 +404,7 @@ func CreateUserStore(c *gin.Context) {
 
 	store, err := repo.CreateStore(ctx, repository.CreateStoreParams{
 		Name:  c.Query("name"),
-		Cover: int32(data.StoreCover),
+		Cover: int64(data.StoreCover),
 	})
 	if err != nil {
 		c.Error(err)
@@ -353,11 +412,11 @@ func CreateUserStore(c *gin.Context) {
 		return
 	}
 
-	user_store := repo.AddStoreToUser(ctx, repository.AddStoreToUserParams{
+	userStore := repo.AddStoreToUser(ctx, repository.AddStoreToUserParams{
 		Storeid: store.ID,
-		Userid:  token.Payload.Id,
+		Userid:  token.Payload.ID,
 	})
-	if user_store != nil {
+	if userStore != nil {
 		msg := errors.New("Failed to add store to user")
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": msg.Error()})
@@ -382,9 +441,9 @@ func GetUserStores(c *gin.Context) {
 		return
 	}
 
-	stores, get_user_stores_err := repo.GetUserStores(context.Background(), int32(token.Payload.Id))
-	if get_user_stores_err != nil {
-		msg := errors.New("Failed to get user stores")
+	stores, getUserStoresErr := repo.GetUserStores(context.Background(), token.Payload.ID)
+	if getUserStoresErr != nil {
+		msg := errors.New("Failed to get user stores: " + getUserStoresErr.Error())
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": msg.Error(),
@@ -396,11 +455,16 @@ func GetUserStores(c *gin.Context) {
 
 func ShowStoreFiles(c *gin.Context) {
 	page, err := strconv.Atoi(c.Query("page"))
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "The page id is not a number" + err.Error()})
+		return
+	}
 
-	page_items := int32(25)
+	pageItems := int64(25)
 
 	// Get store id from url param
-	store_id, err := strconv.Atoi(c.Param("storeid"))
+	storeID, err := strconv.Atoi(c.Param("storeid"))
 	if err != nil {
 		msg := errors.New("Failed to convert storeid to int")
 		c.Error(msg)
@@ -419,17 +483,22 @@ func ShowStoreFiles(c *gin.Context) {
 		return
 	}
 
-	total_pages, err := repo.CalculatePages(context.Background(), repository.CalculatePagesParams{
-		Fileid:  page_items,
-		Userid:  token.Payload.Id,
-		Storeid: int32(store_id),
+	totalPages, err := repo.CalculatePages(context.Background(), repository.CalculatePagesParams{
+		Fileid:  pageItems,
+		Userid:  token.Payload.ID,
+		Storeid: int64(storeID),
 	})
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate pages"})
+		return
+	}
 
 	files, err := repo.GetFilesPaginated(context.Background(), repository.GetFilesPaginatedParams{
 		Limit:  25,
-		Offset: int32(page) * 25,
-		ID:     token.Payload.Id, // user id
-		ID_2:   int32(store_id),  // store id
+		Offset: int64(page) * 25,
+		ID:     token.Payload.ID, // user id
+		ID_2:   int64(storeID),   // store id
 	})
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -439,12 +508,12 @@ func ShowStoreFiles(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-	components.StoreFilesPage(files, int32(store_id), int32(total_pages), int32(page)).Render(c.Request.Context(), c.Writer)
+	components.StoreFilesPage(files, int32(storeID), int32(totalPages), int32(page)).Render(c.Request.Context(), c.Writer)
 }
 
 func UploadFile(c *gin.Context) {
 	// Get store id from url param
-	store_id, err := strconv.Atoi(c.Param("storeid"))
+	storeID, err := strconv.Atoi(c.Param("storeid"))
 	if err != nil {
 		msg := errors.New("Failed to convert storeid to int")
 		c.Error(msg)
@@ -470,7 +539,7 @@ func UploadFile(c *gin.Context) {
 	// Get files from form
 	files := form.File["archive"]
 
-	var saved_files []utils.WriteToDiskResult
+	var savedFiles []utils.WriteToDiskResult
 
 	// Decompress and Extract files
 	for _, file := range files {
@@ -479,7 +548,7 @@ func UploadFile(c *gin.Context) {
 
 		c.Error(errors.New("Archive: " + file.Filename))
 
-		// Check if file is a .tar.zst file
+		// Check if file is a .zip file
 		if ext != ".zip" {
 			msg := errors.New("Invalid file type expected .zip got " + file.Filename)
 			c.Error(msg)
@@ -503,7 +572,7 @@ func UploadFile(c *gin.Context) {
 			}
 			defer os.Remove(tmpDir)
 
-			saved_files, err = utils.DecompressAndExtract(tmpDir, consts.UPLOADS_DIR)
+			savedFiles, err = utils.DecompressAndExtract(tmpDir, consts.UPLOADS_DIR)
 			// Extracts the file to the uploads directory from the archive file in temporary directory
 			if err != nil {
 				msg := errors.New("Failed to decompress and extract file" + err.Error())
@@ -514,9 +583,9 @@ func UploadFile(c *gin.Context) {
 				return
 			}
 
-			c.Error(errors.New("Number of files in archive: " + strconv.Itoa(len(saved_files))))
+			c.Error(errors.New("Number of files in archive: " + strconv.Itoa(len(savedFiles))))
 
-			if len(saved_files) == 0 {
+			if len(savedFiles) == 0 {
 				c.Error(errors.New("No files found in archive"))
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 					"error": "No files found in archive",
@@ -524,12 +593,12 @@ func UploadFile(c *gin.Context) {
 				return
 			}
 
-			for k := range saved_files {
-				file_id, err := repo.CreateFile(ctx, repository.CreateFileParams{
-					Name:         saved_files[k].NanoId,
-					OriginalName: saved_files[k].Name,
+			for k := range savedFiles {
+				fileID, err := repo.CreateFile(ctx, repository.CreateFileParams{
+					Name:         savedFiles[k].NanoID,
+					OriginalName: savedFiles[k].Name,
 					ContentType:  "image/jpeg",
-					Md5:          utils.GetFileHash(fmt.Sprintf("%s%s%s", consts.UPLOADS_DIR, saved_files[k].NanoId, saved_files[k].Ext)),
+					Md5:          utils.GetFileHash(fmt.Sprintf("%s%s%s", consts.UPLOADS_DIR, savedFiles[k].NanoID, savedFiles[k].Ext)),
 				})
 				if err != nil {
 					msg := errors.New("Failed add file to DB: " + err.Error())
@@ -540,17 +609,17 @@ func UploadFile(c *gin.Context) {
 					return
 				}
 
-				c.Error(errors.New("File added to DB with id: " + strconv.Itoa(int(file_id.ID))))
+				c.Error(errors.New("File added to DB with id: " + strconv.Itoa(int(fileID.ID))))
 
-				add_to_user_strore_failure := repo.AddFileToStore(ctx, repository.AddFileToStoreParams{
-					Fileid:  file_id.ID,
-					Storeid: int32(store_id),
+				addToUserStroreFailure := repo.AddFileToStore(ctx, repository.AddFileToStoreParams{
+					Fileid:  fileID.ID,
+					Storeid: int64(storeID),
 				})
 
-				c.Error(errors.New("File added to store with id: " + strconv.Itoa(store_id)))
+				c.Error(errors.New("File added to store with id: " + strconv.Itoa(storeID)))
 
-				if add_to_user_strore_failure != nil {
-					msg := errors.New("Failed to add file to store: " + add_to_user_strore_failure.Error())
+				if addToUserStroreFailure != nil {
+					msg := errors.New("Failed to add file to store: " + addToUserStroreFailure.Error())
 					c.Error(msg)
 					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 						"error": msg.Error(),
@@ -559,10 +628,10 @@ func UploadFile(c *gin.Context) {
 				}
 			}
 
-			c.Error(errors.New("Uploaded " + strconv.Itoa(len(saved_files)) + " file(s)"))
+			c.Error(errors.New("Uploaded " + strconv.Itoa(len(savedFiles)) + " file(s)"))
 
 			c.JSON(http.StatusOK, gin.H{
-				"message": fmt.Sprintf("Uploaded %d file(s) successfully", len(saved_files)),
+				"message": fmt.Sprintf("Uploaded %d file(s) successfully", len(savedFiles)),
 			})
 			return
 
@@ -571,12 +640,12 @@ func UploadFile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("Uploaded %d file(s) successfully", len(saved_files)),
+		"message": fmt.Sprintf("Uploaded %d file(s) successfully", len(savedFiles)),
 	})
 }
 
 func ShowUpload(c *gin.Context) {
-	store_id, err := strconv.Atoi(c.Param("storeid"))
+	storeID, err := strconv.Atoi(c.Param("storeid"))
 	if err != nil {
 		msg := errors.New("Failed to convert storeid to int")
 		c.Error(msg)
@@ -587,13 +656,13 @@ func ShowUpload(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-	components.FileUploadPage(int32(store_id)).Render(c.Request.Context(), c.Writer)
+	components.FileUploadPage(int32(storeID)).Render(c.Request.Context(), c.Writer)
 }
 
 func DeleteFile(c *gin.Context) {
-	file_nanoid := c.Param("fileid")
+	fileNanoid := c.Param("fileid")
 
-	if _, err := strconv.Atoi(file_nanoid); err == nil {
+	if _, err := strconv.Atoi(fileNanoid); err == nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": errors.New("File Id is a number, must be a NanoId instead"),
 		})
@@ -608,7 +677,7 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 
-	file_id, err := repo.GetFileOriginalNameByNanoId(context.Background(), file_nanoid)
+	fileID, err := repo.GetFileOriginalNameByNanoId(context.Background(), fileNanoid)
 	if err != nil {
 		c.Error(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -617,7 +686,7 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 
-	store_id, err := strconv.Atoi(c.Param("storeid"))
+	storeID, err := strconv.Atoi(c.Param("storeid"))
 	if err != nil {
 		msg := errors.New("Failed to convert storeid to int")
 		c.Error(msg)
@@ -627,12 +696,12 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 
-	remove_from_store_err := repo.RemoveFileFromStore(context.Background(), repository.RemoveFileFromStoreParams{
-		Fileid:  file_id.ID,
-		Storeid: int32(store_id),
+	removeFromStoreErr := repo.RemoveFileFromStore(context.Background(), repository.RemoveFileFromStoreParams{
+		Fileid:  fileID.ID,
+		Storeid: int64(storeID),
 	})
-	if remove_from_store_err != nil {
-		msg := errors.New("Failed to remove file from store: " + remove_from_store_err.Error())
+	if removeFromStoreErr != nil {
+		msg := errors.New("Failed to remove file from store: " + removeFromStoreErr.Error())
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": msg.Error,
@@ -640,9 +709,9 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 
-	remove_from_db_err := repo.DeleteFileByNanoId(ctx, file_nanoid)
-	if remove_from_db_err != nil {
-		msg := errors.New("Failed to remove file from db: " + remove_from_db_err.Error())
+	removeFromDBErr := repo.DeleteFileByNanoId(ctx, fileNanoid)
+	if removeFromDBErr != nil {
+		msg := errors.New("Failed to remove file from db: " + removeFromDBErr.Error())
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": msg.Error(),
@@ -650,25 +719,31 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 
-	// c.JSON(http.StatusOK, gin.H{
-	// 	"message": "File deleted successfully",
-	// })
-
 	page, err := strconv.Atoi(c.Query("page"))
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "The page id is not a number" + err.Error()})
+		return
+	}
 
-	page_items := int32(25)
+	pageItems := int64(25)
 
-	total_pages, err := repo.CalculatePages(context.Background(), repository.CalculatePagesParams{
-		Fileid:  page_items,
-		Userid:  token.Payload.Id,
-		Storeid: int32(store_id),
+	totalPages, err := repo.CalculatePages(context.Background(), repository.CalculatePagesParams{
+		Fileid:  pageItems,
+		Userid:  token.Payload.ID,
+		Storeid: int64(storeID),
 	})
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate pages"})
+		return
+	}
 
 	files, err := repo.GetFilesPaginated(context.Background(), repository.GetFilesPaginatedParams{
 		Limit:  25,
 		Offset: 0,
-		ID:     token.Payload.Id, // user id
-		ID_2:   int32(store_id),  // store id
+		ID:     token.Payload.ID, // user id
+		ID_2:   int64(storeID),   // store id
 	})
 	if err != nil {
 		c.Error(err)
@@ -679,7 +754,7 @@ func DeleteFile(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-	components.StoreFilesPage(files, int32(store_id), int32(total_pages), int32(page)).Render(c.Request.Context(), c.Writer)
+	components.StoreFilesPage(files, int32(storeID), int32(totalPages), int32(page)).Render(c.Request.Context(), c.Writer)
 }
 
 func ResetPasswordRoute(c *gin.Context) {
@@ -722,14 +797,14 @@ func GetFilesFromUserStore(c *gin.Context) {
 		return
 	}
 
-	files, get_files_err := repo.GetFilesPaginated(context.Background(), repository.GetFilesPaginatedParams{
+	files, getFilesErr := repo.GetFilesPaginated(context.Background(), repository.GetFilesPaginatedParams{
 		Limit:  20,
 		Offset: 0,
-		ID:     token.Payload.Id,
+		ID:     token.Payload.ID,
 	})
 
-	if get_files_err != nil {
-		msg := errors.New("Failed to get files from db: " + get_files_err.Error())
+	if getFilesErr != nil {
+		msg := errors.New("Failed to get files from db: " + getFilesErr.Error())
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": msg.Error(),
@@ -752,13 +827,7 @@ func DeleteStore(c *gin.Context) {
 		return
 	}
 
-	// c.Error(errors.New("Before get files"))
-	// c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-	// 	"error": "Before get files",
-	// })
-	// return
-
-	store_id, err := strconv.Atoi(c.Param("storeid"))
+	storeID, err := strconv.Atoi(c.Param("storeid"))
 	if err != nil {
 		msg := errors.New("Failed to convert storeid to int")
 		c.Error(msg)
@@ -774,16 +843,16 @@ func DeleteStore(c *gin.Context) {
 	// })
 	// return
 
-	files, get_files_err := repo.GetFileIdsFromUserStore(context.Background(), repository.GetFileIdsFromUserStoreParams{
-		Storeid: int32(store_id),
-		Userid:  token.Payload.Id,
+	files, getFilesErr := repo.GetFileIdsFromUserStore(context.Background(), repository.GetFileIdsFromUserStoreParams{
+		Storeid: int64(storeID),
+		Userid:  token.Payload.ID,
 	})
 
 	c.Error(errors.New("Before delete store"))
 
 	err = repo.RemoveStoreFromUser(context.Background(), repository.RemoveStoreFromUserParams{
-		Userid:  token.Payload.Id,
-		Storeid: int32(store_id),
+		Userid:  token.Payload.ID,
+		Storeid: int64(storeID),
 	})
 	if err != nil {
 		c.Error(errors.New("Failed to delete user store: " + err.Error()))
@@ -793,8 +862,8 @@ func DeleteStore(c *gin.Context) {
 		return
 	}
 
-	if get_files_err != nil {
-		msg := errors.New("Failed to get files from db: " + get_files_err.Error())
+	if getFilesErr != nil {
+		msg := errors.New("Failed to get files from db: " + getFilesErr.Error())
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": msg.Error(),
@@ -808,7 +877,7 @@ func DeleteStore(c *gin.Context) {
 	for i := range files {
 		err = repo.RemoveFileFromStore(context.Background(), repository.RemoveFileFromStoreParams{
 			Fileid:  files[i],
-			Storeid: int32(store_id),
+			Storeid: int64(storeID),
 		})
 		if err != nil {
 			c.Error(errors.New("Failed to remove file from store: " + err.Error()))
