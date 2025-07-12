@@ -88,7 +88,7 @@ func FileUploadPage(store_id int32) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = RedirectButton("Back to Store", "/auth/stores/"+strconv.Itoa(int(store_id))).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = RedirectButton("Back to Store", "/auth/stores/"+strconv.Itoa(int(store_id))+"?page=0").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

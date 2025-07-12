@@ -208,6 +208,7 @@ func GetTokenFromCookie(c *gin.Context) (*auth.Token, error) {
 		msg := errors.New("Failed to get token from middleware")
 		c.Error(msg)
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": msg.Error()})
+		return nil, msg
 	}
 
 	token, err := auth.DecodeToken(cookieToken)
@@ -215,7 +216,7 @@ func GetTokenFromCookie(c *gin.Context) (*auth.Token, error) {
 
 		needsRedirect := auth.RedirectExpired(c)
 		if needsRedirect {
-			return nil, nil
+			return nil, err
 		}
 
 		c.Error(err)
