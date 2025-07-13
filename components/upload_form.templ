@@ -46,7 +46,7 @@ templ FileUploadPage(store_id int32) {
                 >
                     Upload
                 </button>
-                @RedirectButton("Back to Store", "/auth/stores/" + strconv.Itoa(int(store_id)))
+                @RedirectButton("Back to Store", "/auth/stores/" + strconv.Itoa(int(store_id)) + "?page=0")
                 @RedirectButton("All Stores", "/auth/stores/")
             </form>
 

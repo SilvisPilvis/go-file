@@ -53,14 +53,19 @@ func AuthRequired() gin.HandlerFunc {
 		// If cookie is empty or not hound/present, redirect to login page
 		if cookie == "" {
 			c.Redirect(http.StatusFound, "/login")
+			// This abort will prevent any other route code from being called after this
+			c.Abort()
+			return
 		}
 
 		// If we get an error when getting cookie
 		if err != nil {
 			// Check if the error message indicates token expiration
 			if strings.Contains(err.Error(), "token has expired") {
+				// TODO: Instead of redirecting to login, generate a new token
 				// Redirect to login if the token has expired
 				c.Redirect(http.StatusFound, "/login")
+				c.Abort()
 				return
 			} else {
 				// Return unauthorized for other errors

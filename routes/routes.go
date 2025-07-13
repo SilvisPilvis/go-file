@@ -185,6 +185,7 @@ func Login(c *gin.Context) {
 	if err != nil {
 		c.Error(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to login user"})
+		return
 	}
 
 	header := auth.TokenHeader{
@@ -329,6 +330,7 @@ func ServeUploadedFile(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": errors.New("File Id is a number, must be a NanoId instead"),
 		})
+		return
 	}
 
 	token, err := utils.GetTokenFromCookie(c)
@@ -448,6 +450,7 @@ func GetUserStores(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": msg.Error(),
 		})
+		return
 	}
 
 	components.UserStoresPage(stores).Render(c.Request.Context(), c.Writer)
@@ -666,6 +669,7 @@ func DeleteFile(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": errors.New("File Id is a number, must be a NanoId instead"),
 		})
+		return
 	}
 
 	token, err := utils.GetTokenFromCookie(c)
