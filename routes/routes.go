@@ -958,7 +958,10 @@ func DownloadFileAuth(c *gin.Context) {
 
 	// Build file path
 	ext := filepath.Ext(fileInfo.OriginalName)
-	filePath := fmt.Sprintf("%s/%s%s", consts.UPLOADS_DIR, fileNanoid, ext)
+	// Uploads dir ends with /
+	filePath := fmt.Sprintf("%s%s%s", consts.UPLOADS_DIR, fileNanoid, ext)
+
+	c.Error(errors.New("Filepath: " + filePath))
 
 	// Check if file exists on disk
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -971,7 +974,8 @@ func DownloadFileAuth(c *gin.Context) {
 	// Set headers for download
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Transfer-Encoding", "binary")
-	c.Header("Content-Disposition", "attachment; filename="+fileInfo.OriginalName)
+	c.Header("Content-Disposition", "attachment; filename=\""+fileInfo.OriginalName+"\"")
+	// c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Type", fileInfo.ContentType)
 
 	c.File(filePath)
@@ -999,7 +1003,8 @@ func DownloadFile(c *gin.Context) {
 
 	// Build file path
 	ext := filepath.Ext(fileInfo.OriginalName)
-	filePath := fmt.Sprintf("%s/%s%s", consts.UPLOADS_DIR, fileNanoid, ext)
+	// Uploads dir ends with /
+	filePath := fmt.Sprintf("%s%s%s", consts.UPLOADS_DIR, fileNanoid, ext)
 
 	// Check if file exists on disk
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {

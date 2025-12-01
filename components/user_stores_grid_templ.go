@@ -78,7 +78,7 @@ func UserStoresGrid(stores []repository.UserStore) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"absolute top-2 right-2\"><button type=\"submit\" class=\"bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-sm hover:bg-red-600 transition-colors\">X</button></form></a>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"absolute top-2 right-2\"><button type=\"submit\" class=\"bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-sm hover:bg-red-600 transition-colors\"><svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke-width=\"1.5\" stroke=\"currentColor\" class=\"size-6\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M6 18 18 6M6 6l12 12\"></path></svg></button></form></a>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
