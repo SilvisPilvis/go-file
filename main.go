@@ -63,6 +63,10 @@ func main() {
 
 	authorized.DELETE("/stores/:storeid/delete", routes.DeleteStore)
 
+	authorized.GET("/download/:fileid", routes.DownloadFileAuth)
+
+	r.GET("/download/:fileid", routes.DownloadFile)
+
 	err := utils.InitUploadsDir()
 	if err != nil {
 		log.Fatal(err)

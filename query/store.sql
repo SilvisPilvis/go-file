@@ -8,7 +8,7 @@ select * from stores where name = ?;
 select * from stores;
 
 -- name: CreateStore :one
-insert into stores (id, name, cover) values (?, ?, ?) returning *;
+insert into stores (name, cover) values (?, ?) returning *;
 
 -- name: RenameStore :one
 update stores set name = ? where id = ? returning *;

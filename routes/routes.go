@@ -905,3 +905,115 @@ func DeleteStore(c *gin.Context) {
 		"message": "Store deleted successfully",
 	})
 }
+
+func DownloadFileAuth(c *gin.Context) {
+	fileNanoid := c.Param("fileid")
+
+	if _, err := strconv.Atoi(fileNanoid); err == nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "File Id is a number, must be a NanoId instead",
+		})
+		return
+	}
+
+	token, err := utils.GetTokenFromCookie(c)
+	if err != nil {
+		c.Error(errors.New("Failed to get token from cookie"))
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get token from cookie",
+		})
+		return
+	}
+
+	// Check if user owns the file
+	isOwner, err := repo.IsOwner(context.Background(), repository.IsOwnerParams{
+		Username: token.Payload.Username,
+		Name:     fileNanoid,
+	})
+	if err != nil {
+		c.Error(errors.New("Failed to get file owner"))
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get file owner",
+		})
+		return
+	}
+
+	if !isOwner {
+		c.Error(errors.New("User doesn't own this file"))
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "User doesn't own this file",
+		})
+		return
+	}
+
+	// Get file info from database
+	fileInfo, err := repo.GetFileOriginalNameByNanoId(context.Background(), fileNanoid)
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "File not found",
+		})
+		return
+	}
+
+	// Build file path
+	ext := filepath.Ext(fileInfo.OriginalName)
+	filePath := fmt.Sprintf("%s/%s%s", consts.UPLOADS_DIR, fileNanoid, ext)
+
+	// Check if file exists on disk
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "File not found on disk",
+		})
+		return
+	}
+
+	// Set headers for download
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Content-Disposition", "attachment; filename="+fileInfo.OriginalName)
+	c.Header("Content-Type", fileInfo.ContentType)
+
+	c.File(filePath)
+}
+
+func DownloadFile(c *gin.Context) {
+	fileNanoid := c.Param("fileid")
+
+	if _, err := strconv.Atoi(fileNanoid); err == nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "File Id is a number, must be a NanoId instead",
+		})
+		return
+	}
+
+	// Get file info from database (no authentication required)
+	fileInfo, err := repo.GetFileOriginalNameByNanoId(context.Background(), fileNanoid)
+	if err != nil {
+		c.Error(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "File not found",
+		})
+		return
+	}
+
+	// Build file path
+	ext := filepath.Ext(fileInfo.OriginalName)
+	filePath := fmt.Sprintf("%s/%s%s", consts.UPLOADS_DIR, fileNanoid, ext)
+
+	// Check if file exists on disk
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "File not found on disk",
+		})
+		return
+	}
+
+	// Set headers for download
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Content-Disposition", "attachment; filename="+fileInfo.OriginalName)
+	c.Header("Content-Type", fileInfo.ContentType)
+
+	c.File(filePath)
+}
