@@ -1,0 +1,40 @@
+package components
+
+templ HandleResponseMessage() {
+<!-- JavaScript to Handle Response -->
+<div id="response-message" class="my-4 text-center"></div>
+<script>
+    function handleResponse(event) {
+        const responseDiv = document.getElementById('response-message');
+        const response = event.detail.xhr.response;
+
+        // Clear previous messages
+        responseDiv.textContent = '';
+        responseDiv.className = 'my-4 text-center';
+
+        try {
+            const data = JSON.parse(response);
+
+            if (data.error) {
+                // Display error message
+                responseDiv.textContent = data.error;
+                responseDiv.classList.add('text-red-500');
+            } else if (data.message) {
+                // Display success message
+                responseDiv.textContent = data.message;
+                responseDiv.classList.add('text-green-500');
+            }
+        } catch (e) {
+            // Handle invalid JSON response
+            responseDiv.textContent = 'An unexpected error occurred.';
+            responseDiv.classList.add('text-red-500');
+        }
+    }
+
+    // Add event listeners when the DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        // Listen for HTMX response events
+        document.body.addEventListener('htmx:afterRequest', handleResponse);
+    });
+</script>
+}

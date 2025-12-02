@@ -304,7 +304,6 @@ func Register(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": fmt.Sprintf("User %s created successfully", data.Username),
 		})
-		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 }
@@ -514,8 +513,10 @@ func ShowStoreFiles(c *gin.Context) {
 	components.StoreFilesPage(files, int32(storeID), int32(totalPages), int32(page)).Render(c.Request.Context(), c.Writer)
 }
 
+// UploadFile handles the upload of zip archive files to a specific store
+// It extracts the contents of the zip file and stores each file in the database
 func UploadFile(c *gin.Context) {
-	// Get store id from url param
+	// Extract and validate the store ID from URL parameters
 	storeID, err := strconv.Atoi(c.Param("storeid"))
 	if err != nil {
 		msg := errors.New("Failed to convert storeid to int")
@@ -529,7 +530,7 @@ func UploadFile(c *gin.Context) {
 	// Set upload file limit
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, consts.MAX_FILE_UPLOAD) // 1GB
 
-	// Get files from form
+	// Parse the multipart form to extract uploaded files
 	form, err := c.MultipartForm()
 	if err != nil {
 		c.Error(err)
@@ -539,19 +540,19 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// Get files from form
+	// Retrieve the uploaded archive files from the form field "archive"
 	files := form.File["archive"]
 
 	var savedFiles []utils.WriteToDiskResult
 
-	// Decompress and Extract files
+	// Process each uploaded archive file
 	for _, file := range files {
-		// log.Println(file.Filename)
+		// Get the file extension to validate file type
 		ext := filepath.Ext(file.Filename)
 
 		c.Error(errors.New("Archive: " + file.Filename))
 
-		// Check if file is a .zip file
+		// Only accept .zip files - reject all other file types
 		if ext != ".zip" {
 			msg := errors.New("Invalid file type expected .zip got " + file.Filename)
 			c.Error(msg)
@@ -560,23 +561,34 @@ func UploadFile(c *gin.Context) {
 			})
 			return
 		} else {
-			// Create a random temporary directory to store the uploaded archive file
+			// Create a random temporary directory for processing this archive
 			tmpDir := filepath.Join("/tmp", utils.RandomString(6))
+			tmpFile := filepath.Join(tmpDir, file.Filename)
 
 			c.Error(errors.New("Temp dir: " + tmpDir))
 
-			// Saves the uploaded archive file to the temporary directory
-			if err = c.SaveUploadedFile(file, tmpDir); err != nil {
+			// Create the temporary directory with proper permissions
+			if err = os.MkdirAll(tmpDir, 0755); err != nil {
+				c.Error(err)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to create temp directory",
+				})
+				return
+			}
+			// Ensure cleanup of temporary directory when function exits
+			defer os.RemoveAll(tmpDir)
+
+			// Save the uploaded zip file to the temporary location
+			if err = c.SaveUploadedFile(file, tmpFile); err != nil {
 				c.Error(err)
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 					"error": "Failed to save file",
 				})
 				return
 			}
-			defer os.Remove(tmpDir)
 
-			savedFiles, err = utils.DecompressAndExtract(tmpDir, consts.UPLOADS_DIR)
-			// Extracts the file to the uploads directory from the archive file in temporary directory
+			// Extract and decompress the zip archive from the temporary location to the uploads directory
+			savedFiles, err = utils.DecompressAndExtract(tmpFile, consts.UPLOADS_DIR)
 			if err != nil {
 				msg := errors.New("Failed to decompress and extract file" + err.Error())
 				c.Error(msg)
@@ -588,6 +600,7 @@ func UploadFile(c *gin.Context) {
 
 			c.Error(errors.New("Number of files in archive: " + strconv.Itoa(len(savedFiles))))
 
+			// Validate that the archive contained at least one file
 			if len(savedFiles) == 0 {
 				c.Error(errors.New("No files found in archive"))
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -596,11 +609,13 @@ func UploadFile(c *gin.Context) {
 				return
 			}
 
+			// Process each extracted file and add it to the database
 			for k := range savedFiles {
+				// Create a file record in the database with metadata
 				fileID, err := repo.CreateFile(ctx, repository.CreateFileParams{
-					Name:         savedFiles[k].NanoID,
-					OriginalName: savedFiles[k].Name,
-					ContentType:  "image/jpeg",
+					Name:         savedFiles[k].NanoID, // Unique randomized filename
+					OriginalName: savedFiles[k].Name,   // Original filename from archive
+					ContentType:  "image/jpeg",         // Default content type (TODO: detect actual type)
 					Md5:          utils.GetFileHash(fmt.Sprintf("%s%s%s", consts.UPLOADS_DIR, savedFiles[k].NanoID, savedFiles[k].Ext)),
 				})
 				if err != nil {
@@ -614,6 +629,7 @@ func UploadFile(c *gin.Context) {
 
 				c.Error(errors.New("File added to DB with id: " + strconv.Itoa(int(fileID.ID))))
 
+				// Associate the file with the specified store
 				addToUserStroreFailure := repo.AddFileToStore(ctx, repository.AddFileToStoreParams{
 					Fileid:  fileID.ID,
 					Storeid: int64(storeID),
@@ -621,6 +637,7 @@ func UploadFile(c *gin.Context) {
 
 				c.Error(errors.New("File added to store with id: " + strconv.Itoa(storeID)))
 
+				// Check if the file-to-store association was successful
 				if addToUserStroreFailure != nil {
 					msg := errors.New("Failed to add file to store: " + addToUserStroreFailure.Error())
 					c.Error(msg)
@@ -633,17 +650,20 @@ func UploadFile(c *gin.Context) {
 
 			c.Error(errors.New("Uploaded " + strconv.Itoa(len(savedFiles)) + " file(s)"))
 
+			// Return success response with count of uploaded files
 			c.JSON(http.StatusOK, gin.H{
 				"message": fmt.Sprintf("Uploaded %d file(s) successfully", len(savedFiles)),
 			})
 			return
 
 		}
-
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("Uploaded %d file(s) successfully", len(savedFiles)),
+	// Fallback response (should not normally reach here)
+	c.Error(errors.New("Uploaded " + strconv.Itoa(len(savedFiles)) + " file(s)"))
+
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error": "The request was not successful. 0 files uploaded.",
 	})
 }
 

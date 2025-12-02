@@ -6,7 +6,13 @@ templ UpdateStorePage() {
     <body class="bg-gray-100 flex items-center justify-center h-screen">
         <div class="bg-white p-8 rounded-lg shadow-md w-96">
             <h1 class="text-2xl font-bold mb-6 text-center">Create Store</h1>
-            <form hx-post="/store/create" hx-trigger="submit" hx-ext="json-enc">
+            <form
+            hx-post="/store/create"
+            hx-trigger="submit"
+            hx-ext="json-enc"
+            hx-target="#response-message"
+            hx-swap="innerHTML"
+            >
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700">
                     Store Cover
@@ -34,6 +40,7 @@ templ UpdateStorePage() {
                     />
                     </label>
                 </div>
+                @HandleResponseMessage()
                 <button
                     type="submit"
                     class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"

@@ -6,11 +6,12 @@ templ NewStorePage() {
     <body class="bg-gray-100 flex items-center justify-center h-screen">
         <div class="bg-white p-8 rounded-lg shadow-md w-96">
             <h1 class="text-2xl font-bold mb-6 text-center">Create Store</h1>
-            <form 
-                hx-post="/auth/stores/create" 
-                hx-trigger="submit" 
+            <form
+                hx-post="/auth/stores/create"
+                hx-trigger="submit"
                 hx-ext="json-enc"
-                hx-on:after-request="handleResponse(event)"
+                hx-target="#response-message"
+                hx-swap="innerHTML"
             >
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700">
@@ -38,6 +39,7 @@ templ NewStorePage() {
                         />
                     </label>
                 </div>
+                @HandleResponseMessage()
                 <button
                     type="submit"
                     class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -45,39 +47,6 @@ templ NewStorePage() {
                     Create Store
                 </button>
             </form>
-
-            <!-- Response Message Container -->
-            <div id="response-message" class="mt-4 text-center text-sm"></div>
-
-            <!-- JavaScript to Handle Response -->
-            <script>
-                function handleResponse(event) {
-                    const responseDiv = document.getElementById('response-message');
-                    const response = event.detail.xhr.response;
-
-                    // Clear previous messages
-                    responseDiv.textContent = '';
-                    responseDiv.className = 'mt-4 text-center text-sm';
-
-                    try {
-                        const data = JSON.parse(response);
-
-                        if (data.error) {
-                            // Display error message
-                            responseDiv.textContent = data.error;
-                            responseDiv.classList.add('text-red-500');
-                        } else if (data.message) {
-                            // Display success message
-                            responseDiv.textContent = data.message;
-                            responseDiv.classList.add('text-green-500');
-                        }
-                    } catch (e) {
-                        // Handle invalid JSON response
-                        responseDiv.textContent = 'An unexpected error occurred.';
-                        responseDiv.classList.add('text-red-500');
-                    }
-                }
-            </script>
         </div>
     </body>
 </html>

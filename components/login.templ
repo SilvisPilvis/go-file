@@ -6,7 +6,11 @@ templ LoginPage() {
     <body class="bg-gray-100 flex items-center justify-center h-screen">
         <div class="bg-white p-8 rounded-lg shadow-md w-96">
             <h1 class="text-2xl font-bold mb-6 text-center">Login</h1>
-            <form hx-post="/login" hx-trigger="submit" hx-ext="json-enc">
+            <form
+            hx-post="/login"
+            hx-trigger="submit"
+            hx-ext="json-enc"
+            >
                 <div class="mb-4">
                     <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
                     <input
